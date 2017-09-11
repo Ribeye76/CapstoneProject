@@ -28,7 +28,7 @@ rm(twitter)
 rm(blogs)
 rm(news)
 
-for (i in 51:100) {
+for (i in 1:100) {
   lowBlogs <- 1+4400*(i-1)
   uppBlogs <- 4400*i
   spBlogs <- sBlogs[lowBlogs:uppBlogs]
@@ -127,7 +127,7 @@ cumquadgram <- quadgram1
 rm(bigram1, trigram1, quadgram1)
 file.remove("bigram 1.csv", "trigram 1.csv", "quadgram 1.csv")
 
-for (j in 2:50) {
+for (j in 2:100) {
   filename <- eval(sprintf("bigram %d.csv", j)[1])
   bigram <- read.csv(filename)
   cumbigram <- merge(cumbigram, bigram, by="words", all.x=TRUE)
