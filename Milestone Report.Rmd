@@ -1,0 +1,121 @@
+---
+title: "Data Science Milestone Report"
+author: "J Rivas"
+date: "7 de agosto de 2017"
+output: html_document
+---
+
+# Introduction
+The goal of the capstone project is to create a predictive text model using a large text corpus of documents as training data through Natural Language Processing techniques.
+
+The Milestone report includes files and data exploratory analysis and describes how the predictive model will be created.
+
+
+# Getting The Data
+After downloading the zip file containing the text files from https://d396qusza40orc.cloudfront.net/dsscapstone/dataset/Coursera-SwiftKey.zip, they are read into R with readLines function.
+```{r readfiles, warning=FALSE}
+blogs <- readLines("en_US.blogs.txt", encoding = "latin1", skipNul = TRUE)
+news <- readLines("en_US.news.txt", encoding = "latin1", skipNul = TRUE)
+twitter <- readLines("en_US.twitter.txt", encoding = "latin1", skipNul = TRUE)
+```
+# Files exploratory Analysis
+First, an exploratory analysis of the files is presented.
+```{r summary, warning=FALSE}
+library(stringi)
+# Get file sizes in MB
+blogsfilesize <- file.info("en_US.blogs.txt")$size / 1024 ^ 2
+newsfilesize <- file.info("en_US.news.txt")$size / 1024 ^ 2
+twitterfilesize <- file.info("en_US.twitter.txt")$size / 1024 ^ 2
+# Get number of words
+blogsfilewords <- stri_count_words(blogs)
+newsfilewords <- stri_count_words(news)
+twitterfilewords <- stri_count_words(twitter)
+# Create table with summary of files information
+data.frame(source = c("blogs", "news", "twitter"),
+           file_size_MB = c(blogsfilesize, newsfilesize, twitterfilesize),
+           num_lines = c(length(blogs), length(news), length(twitter)),
+           num_words = c(sum(blogsfilewords), sum(newsfilewords), sum(twitterfilewords)),
+           mean_num_words = c(mean(blogsfilewords), mean(newsfilewords), mean(twitterfilewords)))
+```
+
+# Sample
+As the files are very large, it is neccessary to work from a random sample of 1% of the files.
+```{r sample, warning=FALSE}
+# Make samples of 1% of each file
+set.seed(1234)
+datasample <- c(sample(blogs, length(blogs) * 0.001),
+                 sample(news, length(news) * 0.001),
+                 sample(twitter, length(twitter) * 0.001))
+ # Remove used temporary files
+rm(blogs, news, twitter)
+rm(blogsfilesize, newsfilesize, twitterfilesize)
+rm(blogsfilewords, newsfilewords, twitterfilewords)
+```
+
+# Corpus creation
+From the sample data, a corpus file is created. Using TM package, corpus is cleaned: remove special characters, covert to lowercase, remove english stopwords, punctuation, numbers and multiple withespaces. The outcome is a plain text document. 
+```{r corpus, warning=FALSE, message=FALSE}
+library(tm)
+# Create corpus, clean and transform data
+corpus <- VCorpus(VectorSource(datasample))
+replace <- content_transformer(function(x, pattern) gsub(pattern, " ", x)) # Remove special characters
+corpus <- tm_map(corpus, replace, "(f|ht)tp(s?)://(.*)[.][a-z]+")
+corpus <- tm_map(corpus, replace, "@[^\\s]+")
+corpus <- tm_map(corpus, replace, "/|@|\\|")
+corpus <- tm_map(corpus, replace, "<.*>")
+corpus <- tm_map(corpus, tolower) # Convert to lowercase
+#corpus <- tm_map(corpus, removeWords, stopwords("en")) # Remove english stop words
+#corpus <- tm_map(corpus, removePunctuation) # Remove punctuation
+corpus <- tm_map(corpus, removeNumbers) # Remove numbers
+corpus <- tm_map(corpus, stripWhitespace) # Remove multiple whitespaces
+corpus <- tm_map(corpus, PlainTextDocument) # Leave a plain text document
+rm(datasample)
+```
+
+# Tokenization
+Using RWeka package, Term Document Matrixes are created from Corpus file for groups of one, two and three words, and corresponding frequencies are calculated.
+```{r tokenization, warning=FALSE}
+library(RWeka)
+options(mc.cores=1)
+# Create function to calculate frequencies from a Term Document Matrix
+calcFreq <- function(tdm) {
+  freq <- sort(rowSums(as.matrix(tdm)), decreasing = TRUE)
+  return(data.frame(word = names(freq), freq = freq))
+}
+# Create functions for tokenization of the Term Document Matrix
+bigramtokenizer <- function(x) NGramTokenizer(x, Weka_control(min = 2, max = 2))
+trigramtokenizer <- function(x) NGramTokenizer(x, Weka_control(min = 3, max = 3))
+# Create Term Document Matrixes form corpus, remove sparse terms anda calculate frequencies
+frequnigram <- calcFreq(removeSparseTerms(TermDocumentMatrix(corpus), 0.9999))
+freqbigram <- calcFreq(removeSparseTerms(TermDocumentMatrix(corpus, control = list(tokenize = bigramtokenizer)), 0.9999))
+freqtrigram <- calcFreq(removeSparseTerms(TermDocumentMatrix(corpus, control = list(tokenize = trigramtokenizer)), 0.9999))
+rm(corpus)
+```
+
+# Plotting
+Using ggplot2 package, we create bar plots for most frequent unigrams, bigrams and trigrams within the Corpus 
+```{r plots, warning=FALSE, message=FALSE}
+library(ggplot2)
+# Create Function for plots with ggplot2
+plotFreq<- function(data, label) {
+  ggplot(data[1:30,], aes(reorder(word, -freq), freq)) +
+         labs(title = label, x = "Words", y = "Frequency") +
+         theme(axis.text.x = element_text(angle = 90, size = 12, hjust = 1)) +
+         geom_bar(stat = "identity", fill = I("blue"))
+}
+# Use function to create plots
+plotFreq(frequnigram, "30 Most Common Unigrams")
+plotFreq(freqbigram, "30 Most Common Bigrams")
+plotFreq(freqtrigram, "30 Most Common Trigrams")
+```
+
+#Next Steps
+The next steps of the Capstone Project will be to develop a predictive algorithm.
+
+Predictive algorithm should use fequencies of bigram and trigram (depending on the number of words entered) to predict the next word.
+
+It is also needed a way to treat cases where the entered words are not present in frequencies tables.
+
+Once solved this, the model will be deployed into a Shiny app.
+
+The Milestone Report was created using just 1% of the data, it may be neccessary to re-train the model with a larger percentage of the datasets.
